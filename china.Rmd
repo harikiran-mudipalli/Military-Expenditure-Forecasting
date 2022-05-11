@@ -1,0 +1,225 @@
+---
+title: "China"
+author: "Mudipalli, Hari Kiran Reddy"
+date: "03/04/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(utils)
+library(astsa)
+library(dplyr)
+library(tsibble)
+library(tidyverse)
+library(fpp3)
+library(GGally)
+library(sugrrants)
+library(xts) 
+library(lubridate)
+```
+
+## Splitting the data country-wise
+```{r}
+military_df <- read.csv("military_df.csv")
+
+military_df <- military_df %>%
+  mutate_at("Year", ~ymd(paste(.,"01", "01"))) %>%
+  as_tsibble(key= c(Code),index = Year)
+```
+
+```{r}
+library(tsibble)
+rows <- "Entity == 'China'"
+china_df <- military_df %>% filter(Entity == "China") %>%
+            select(Miliary_exp_mil, Year)
+class(china_df)
+```
+
+
+```{r}
+library(prophet)
+ch <- china_df %>%
+  rename(y = Miliary_exp_mil) %>%
+  rename(ds = Year)
+m <- prophet(ch)
+future <- make_future_dataframe(m, periods = 5, freq = "year")
+tail(future)
+
+forecast <- predict(m, future)
+tail(forecast[c('ds', 'yhat', 'yhat_lower', 'yhat_upper')])
+
+plot(m, forecast)
+prophet_plot_components(m, forecast)
+```
+
+
+### Line plot of military expenditure of China
+```{r}
+china_df %>%
+  autoplot(Miliary_exp_mil) +
+  labs(title= "China Military expediture", y = "$US")
+```
+
+### Decomposition
+```{r}
+dcmp <- china_df %>%
+  model(stl = STL(Miliary_exp_mil))
+components(dcmp) %>% autoplot()
+```
+
+In this decomposed time series data of China's military expenditure, it can observed that there is a positive trend from 2002. There is no seasonality as such in this series.
+
+### Augmented Dickey-Fuller Test
+
+```{r}
+library(tseries)
+adf.test(china_df$Miliary_exp_mil)
+```
+From Dickey-Fuller test we can conclude that the series is not stationary. We might have to difference the time series.
+
+```{r}
+library(tseries)
+adf.test(na.locf(difference(difference(china_df$Miliary_exp_mil))))
+```
+- with p-value less than 0.05, null hypothesis of non-stationary data is rejected after differencing the series twice.
+
+```{r}
+china_df %>%
+  autoplot(difference(difference(china_df$Miliary_exp_mil))) +
+  labs(title= "China Military expediture",subtitle = "twice differenced", y = "$US")
+```
+```{r}
+AutoCorrelation = acf(na.locf(china_df$Miliary_exp_mil), plot=FALSE)
+plot(AutoCorrelation, main = "Autocorrelation before differencing")
+
+AutoCorrelation = acf(na.locf(difference(difference(china_df$Miliary_exp_mil))), plot=FALSE)
+plot(AutoCorrelation, main = "Autocorrelation after differencing")
+```
+
+## Train-test split
+```{r}
+train = china_df %>%slice(1:28)
+test = china_df %>%slice(n()-4:0)
+```
+
+```{r}
+train <- train %>%
+  mutate(diff2 = difference(difference(train$Miliary_exp_mil)))
+```
+
+```{r}
+library(caret)
+library(forecast)
+fit <- train %>%
+  model(trend_model = TSLM(Miliary_exp_mil ~ trend()))
+chn_fc <- fit %>% forecast(h = "6 years")
+
+accuracy(chn_fc$.mean, test$Miliary_exp_mil)
+
+chn_fc %>% autoplot(china_df)
+```
+
+### ARIMA
+
+```{r}
+china_df %>%
+  gg_tsdisplay(difference(difference(Miliary_exp_mil)), plot_type='partial')
+```
+
+For initial model, from PACF, AR(2) model and from ACF MA(0)
+
+```{r}
+caf_fit <- china_df %>%
+  model(arima220 = ARIMA(Miliary_exp_mil ~ pdq(2,2,0)),
+        arima210 = ARIMA(Miliary_exp_mil ~ pdq(2,1,0)),
+        search = ARIMA(Miliary_exp_mil, stepwise=FALSE)
+  
+  )
+caf_fit
+glance(caf_fit) %>% arrange(AICc) %>% select(.model:BIC)
+
+caf_fit %>%
+  select(search) %>%
+  gg_tsresiduals()
+```
+
+Full search has found that ARIMA(0,2,1) gives lowerst AICc value
+
+## forecasting
+```{r}
+caf_fit %>%
+  forecast(h=5) %>%
+  filter(.model=='search') %>%
+  autoplot(china_df)
+```
+
+```{r}
+arima_forecast <- caf_fit %>%
+  forecast(h=5) %>%
+  filter(.model=='search')
+arima_forecast
+```
+
+
+```{r}
+## baseline model accuracy
+print("Baseline accuracy:")
+accuracy(chn_fc$.mean, test$Miliary_exp_mil)
+
+## ARIMA model accuracy
+print("arima accuracy:")
+accuracy(arima_forecast$.mean, test$Miliary_exp_mil)
+```
+
+from the accuracy scores, there is an improvement from baseline model. There is still scope to improve the forecasting.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
