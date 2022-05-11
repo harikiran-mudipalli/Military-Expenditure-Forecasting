@@ -1,0 +1,213 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readxl)
+library(hablar) ## retype()
+library(zoo)
+library(hash)
+library(dict)
+library(dplyr)
+library(lubridate)
+library(tsibble)
+if (!require("devtools")) install.packages("devtools")
+devtools::install_github("mkuhn/dict")
+```
+
+```{r}
+d = read_excel("CNTSDATA.xlsx")
+military <-read_excel("CNTSDATA2.xlsx")
+
+## creating a hashmap from header and column names
+hm <- data.frame(row.names = names(d), val = names(military))
+
+## creating a dictionary to map header names and column names
+hm_dic <- dict()
+#hm_dic[c(row.names(hm))] <- hm$val
+hm_dic[c(hm$val)] <- row.names(hm)
+
+
+## Remove columns with more than 50% NA
+mil <- military[, which(colMeans(!is.na(military)) > 0.5)]
+```
+
+```{r}
+n = read.csv("nuclear.csv")
+```
+
+```{r}
+mil1 <- na.locf(mil[c(1:35,37:82, 84,88:120)])
+clean_mil <- retype(na.locf(mil1))
+write.csv(clean_mil,"data.csv", row.names = FALSE)
+```
+
+```{r}
+full <- merge(x=clean_mil, y=n, by.x=c("country","year"), by.y =c("Entity","Year") )
+write.csv(full,"data_with_nuclear.csv", row.names = FALSE)
+```
+
+### Correlations
+
+```{r}
+## constructing a dataframe of correlations
+alpha <- data.frame(t(cor(full$military1, full[c(5:115)])))
+
+## column renaming
+colnames(alpha) <- c("corr")
+
+## filtering out absolute correlation > 0.9
+high_cors <- alpha %>% filter(abs(corr) > 0.9)
+
+## storing the columns of higly correlated values as a list
+high_cors_names <- c(row.names(high_cors))
+```
+
+```{r}
+## printing header names of highly correlated columns
+for (val in high_cors_names) {
+  print(hm_dic[[val]])
+}
+```
+
+```{r}
+hm_dic[c(high_cors_names)]
+```
+
+
+
+
+## Splitting the data country-wise
+```{r}
+military_df <- read.csv("military_df.csv")
+```
+
+```{r}
+library(tsibble)
+rows <- "Entity == 'China'"
+china_df <- military_df %>% filter(Entity == "China") %>%
+            select(Miliary_exp_mil, Year) %>%
+            as_tsibble(index = Year)
+class(china_df)
+```
+
+### Line plot of military expenditure of China
+```{r}
+china_df %>%
+  autoplot(Miliary_exp_mil) +
+  labs(title= "China Military expediture", y = "$US")
+```
+
+
+```{r}
+library(utils)
+library(astsa)
+library(dplyr)
+library(tsibble)
+library(tidyverse)
+library(fpp3)
+library(GGally)
+library(sugrrants)
+library(xts) 
+dcmp <- china_df %>%
+  model(stl = STL(Miliary_exp_mil))
+components(dcmp) %>% autoplot()
+```
+## Train-test split
+```{r}
+train = china_df %>%slice(1:28)
+test = china_df %>%slice(n()-4:0)
+```
+
+```{r}
+acf(train$Miliary_exp_mil)
+```
+
+Each spike that rises above or falls below the dashed lines is considered to be statistically significant. (Chapter 16 talks about this in detail.) This means the spike has a value that is significantly different from zero. If a spike is significantly different from zero, that is evidence of autocorrelation. A spike that's close to zero is evidence against autocorrelation.
+
+This also means that the data is not stationary.
+
+
+
+```{r}
+train %>%
+  autoplot(difference(Miliary_exp_mil)) +
+  labs(title= "China Military expediture", y = "$US")
+```
+differencing the time series tends to make it stationary.
+
+### Augmented Dickey-Fuller Test
+
+```{r}
+library(tseries)
+adf.test(na.locf(difference(difference(china_df$Miliary_exp_mil))))
+```
+- differencing the time series twice resulted in stationary hypothesis.
+
+```{r}
+train <- train %>%
+  mutate(diff2 = difference(difference(train$Miliary_exp_mil)))
+```
+
+
+```{r}
+library(caret)
+library(forecast)
+fit <- train %>%
+  model(trend_model = TSLM(Miliary_exp_mil ~ trend()))
+chn_fc <- fit %>% forecast(h = "6 years")
+
+accuracy(chn_fc$.mean, test$Miliary_exp_mil)
+
+chn_fc %>% autoplot(china_df)
+```
+
+
+```{r}
+acf(diff(china_df$Miliary_exp_mil))
+```
+
+differencing the time series tends to make it stationary.
+
+```{r}
+library(tseries)
+adf.test(na.locf(difference(difference(china_df$Miliary_exp_mil))))
+```
+
+
+
+```{r}
+exp <- as_tsibble(china_df %>%
+  select(Miliary_exp_mil)) %>%
+  update_tsibble(index = Year, regular = TRUE)
+```
+
+```{r}
+china_diff_exp <- exp %>%
+  mutate(diff_exp = difference(Miliary_exp_mil))
+```
+
+
+```{r}
+fit <- china_diff_exp %>%
+  model(mean_model = MEAN(diff_exp))
+
+fit %>% forecast(h = '2 year') %>%
+  autoplot(china_diff_exp)
+```
+
+
+
+
+
+
+
+
+
+
