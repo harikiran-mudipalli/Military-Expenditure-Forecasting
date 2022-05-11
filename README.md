@@ -6,6 +6,11 @@ Over time, military expenditure is periodically increasing worldwide. In 2020 da
 precise time-series model by exploring data on the dataset combined from SIPRI (Stockholm International Peace Research Institute), nuclear weapon, and CNTS
 (cross-National Time-Series) datasets. The topmost countries were evaluated over the period to see the pattern, and trend over the years. We used Facebook’s Prophet time-series model for optimal forecasting. This model will predict the military expenditure of the top countries for up to next five years.<br>
 
+## Web app layout
+![image](https://user-images.githubusercontent.com/43600130/167756269-6ae91b3b-dcf1-4ced-beb7-6a71da05ea7f.png)
+![image](https://user-images.githubusercontent.com/43600130/167756296-009657f9-4ab8-4bc1-a224-92b2d20c9801.png)
+![image](https://user-images.githubusercontent.com/43600130/167756305-378ffc1b-09bd-495a-bc11-2f7db0e0c053.png)
+
 ### Data sources:
 [SIPRI Military Expenditure Database by STOCKHOLM INTERNATIONAL PEACE RESEARCH INSTITUTE](https://www.sipri.org/)<br>
 [Nuclear weapons data](https://ourworldindata.org/nuclear-weapons) by [Max Roser, Bastian Herre and Joe Hasell](https://ourworldindata.org/team)<br>
